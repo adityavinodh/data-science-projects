@@ -1,0 +1,193 @@
+---
+title: "Data Science Project"
+output: html_document
+date: "2023-04-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+
+#Loading packages
+library(readr)
+library(lattice)
+library(tidyverse)
+library(dplyr)
+
+#Loading dataset, pre-processing for variable mutation/removal/NA ommissions
+studentstats <- read_csv('dataset.csv')
+studentstats <- filter(studentstats, Target != "Enrolled") %>%
+  na.omit(studentstats) %>%
+  mutate(DropOut = if_else(Target == "Graduate",0,1)) %>%
+  mutate(AvgCreditsGrade = ((`Curricular units 1st sem (grade)`+`Curricular units 2nd sem (grade)`)/2))
+studentstats$DropOut <- as.factor(studentstats$DropOut)
+studentstats$Displaced <- as.factor(studentstats$Displaced)
+studentstats$International <- as.factor(studentstats$International)
+studentstats$Gender <- as.factor(studentstats$Gender)
+studentstats$Debtor <- as.factor(studentstats$Debtor)
+studentstats$`Scholarship holder` <- as.factor(studentstats$`Scholarship holder`)
+studentstats <- select(studentstats, -c(Target, `Application mode`, `Application order`, `Previous qualification`))
+
+#Summary statistics table
+minstats <- summarise_if(studentstats, is.numeric, min)
+maxstats <- summarise_if(studentstats, is.numeric, max)
+medianstats <- apply(studentstats[,17:31],2, median)
+iqrstats <- summarise_if(studentstats,is.numeric, IQR)
+summarystats = rbind(minstats,maxstats,medianstats,iqrstats)
+rownames(summarystats) <- c("Minimum","Maximum","Median","IQR")
+summarystats <- t(summarystats)
+
+#Distribution of Demographic Data: Age
+hist(studentstats$`Age at enrollment`, xlab = 'Age at Enrollment', ylab = 'Count', main = "Frequency Distribution of Enrollment Ages")
+
+#Distribution of DropOut vs. Graduated Rates
+ggplot(studentstats, aes(x = DropOut)) +
+  geom_bar() +
+  labs(y= "Number of students", x = "Dropped Out/Graduated Status", title = "Drop Out and Graduation Rates") +
+  scale_x_discrete(labels=c('Graduated', 'Drop Out'))
+
+drop = subset(studentstats, DropOut == 1)
+nrow(drop)
+
+nrow(subset(studentstats, DropOut == 0))
+
+#Association between Average Sem 1,2 Grades and Drop Out (Bivariate: Num, Cat)
+studentstats %>%
+  group_by(DropOut) %>%
+  summarise(MeanCreditsGraded = mean(AvgCreditsGrade))
+boxplot(studentstats$AvgCreditsGrade~studentstats$DropOut, xlab ="Student Status", ylab="Mean Credits Graded", names = c("Graduated","Drop Out")
+)
+
+ggplot(studentstats, aes(x = DropOut), fill = AvgCreditsGrade)+ 
+    geom_boxplot()
+
+#Association between Age and Drop Out (Bivariate: Num, Cat)
+studentstats %>%
+  group_by(DropOut) %>%
+  summarise(MeanAge = mean(`Age at enrollment`))
+boxplot(studentstats$`Age at enrollment`~studentstats$DropOut)
+
+#Association between Displaced and Drop Out (Bivariate: Cat, Cat)
+studentstats %>%
+  group_by(Displaced, DropOut) %>%
+  summarise(Number_Students = n())
+table(studentstats$Displaced, studentstats$DropOut) 
+dispdropout = prop.table(table(studentstats$Displaced, studentstats$DropOut),2)
+dispdropout
+
+#Association between International and Drop Out (Bivariate: Cat, Cat)
+table(studentstats$International, studentstats$DropOut) 
+intldropout = prop.table(table(studentstats$International, studentstats$DropOut),2)
+intldropout
+
+
+par(mfrow=c(1,2))
+barplot(dispdropout,main="Student Displacement and Drop Out Rates", cex.names = 1.5,     
+        col = c('red', 'darkGray'),
+        legend.text=c("No","Yes"),
+        args.legend=list(x="topleft",cex=1),
+        xlab = "Displaced Status",
+        ylab = "Proportion of Students",
+        names.arg=c("Not Displaced","Displaced"))
+
+barplot(intldropout,main="Student Displacement and Drop Out Rates ", cex.names = 1.5,     
+        col = c('red', 'darkGray'),
+        legend.text=c("No","Yes"),
+        args.legend=list(x="topleft",cex=1),
+        xlab = "International Status",
+        ylab = "Proportion of Students",
+        names.arg=c("Not Displaced","Displaced"))
+
+par(mfrow=c(1,2))
+ggplot(studentstats, aes(x = Displaced, fill = DropOut)) + 
+    geom_bar(position = "dodge")
+ggplot(studentstats, aes(x = International, fill = DropOut)) + 
+    geom_bar(position = "dodge")
+
+
+#Outcome of Drop Out on Association between 2nd Sem Credits, Age (Num, Num, Cat)
+colorcode <- ifelse(studentstats$DropOut == 1, "red", "blue")
+pchcode <- ifelse(studentstats$DropOut == 1, 19, 17)
+plot(studentstats$`Age at enrollment`, studentstats$`Curricular units 2nd sem (enrolled)`, col = colorcode, pch = pchcode, xlab = "Age at enrollment (yrs)", ylab = "Curricular units 2nd sem (enrolled)")
+
+#Effect of Scholarship Holder Status on Association between Debtor and Drop Out Rate
+ss1 <- studentstats %>%
+group_by(DropOut, Debtor, `Scholarship holder`) %>%
+summarise(Students = n()) 
+
+par(mfrow=c(1,2))
+ggplot(subset(studentstats, studentstats$`Scholarship holder` == 1), aes(x=Debtor, fill = DropOut)) + labs(title = "Scholarship Holders") + geom_bar(position = "dodge")
+scale_x_discrete(labels=c('Non-Debtor', 'Debtor'))
+ggplot(subset(studentstats, studentstats$`Scholarship holder` == 0), aes(x=Debtor, fill = DropOut)) + labs(title = "Non-Scholarship Holders") + geom_bar(position = "dodge")
+                        
+
+legend("topleft", c("Dropout", "Graduate"), pch = c(19, 17), col = c("red", "blue"))
+
+
+correlation = c()
+for(i in 1:ncol(studentstats)){
+  correlation[i] <- cor(studentstats[, i], studentstats$DropOut)
+  
+}
+
+head(correlation)
+Predictors = data.frame(Variable=colnames(studentstats),Correlation=abs(correlation))
+Predictors <- filter(Predictors, Variable!= "DropOut")
+table(Predictors$Correlation, c(Predictors$Variable))
+
+
+barplot(correlation, xlab = "Variable", ylab = "Pearson Correlation")
+
+
+
+fit_stats = glm(DropOut~., data = studentstats, family = binomial)
+summary(fit_stats)
+pred_prob = predict(fit_stats, newdata = studentstats, type = "response")
+
+
+dec.threshold = seq(0.1,0.9,0.1)
+
+for (i in dec.threshold){
+  pred_lab <- if_else(pred_prob > i, "DropOut", "Graduate")
+  confusion_mtx <- table(pred_lab, studentstats$DropOut) 
+  truepositives = confusion_mtx[3]
+  truenegatives = confusion_mtx[2]
+  accuracy = (truepositives+truenegatives)/nrow(studentstats)
+  sensitivity = confusion_mtx[2,2]/sum(confusion_mtx[,2])
+  specificty = confusion_mtx[1,1]/sum(confusion_mtx[,1])
+  store_accuracy [i*10] = accuracy 
+  store_sensitivity [i*10] = sensitivity
+  store_specificty[i*10] = specificity
+ 
+}
+
+head(store_accuracy)
+head(store_sensitivity)
+head(store_specificity)
+
+
+
+plot(dec.threshold, store_accuracy)
+optimaldecision = dec.threshold[which.max(store_accuracy)]
+optimaldecision
+
+
+```
+
+## Including Plots$
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
